@@ -2,18 +2,17 @@ import numpy as np
 from math import pi,sin,cos,radians
 import matplotlib.pyplot as plt
 from ir_test import user_input
-from scipy import optimize
+
 
 
 # Estimation parameter of EKF
-Q = np.diag([0.7,0.7,0.022])
+Q = np.diag([0.7,0.7,0.002])
 R = np.diag([5.09,12.01,0.03])
 
-#Q = np.diag([0.1,0.1,0.1])
-#R = np.diag([0.2,0.2,0.2])
 
-TURN = 45
-MOVE = 30
+TURN = 44.7
+MOVE = 29
+zPrev = np.matrix([0,0,0])
 show_animation = True
 
 
@@ -46,55 +45,52 @@ def motion_model(x,u):
 
 def observation_model(x):
     a,b = user_input(x.item(0),x.item(1),x.item(2))
-    return np.matrix([a,b,radians(x.item(2))])
+    return np.matrix([b,a,radians(x.item(2))])
 
 
-def jacobF(x):
-    '''
+def jacobF(x,u):
+
     # Jacobian of Motion Model
-    stdAngle = x[2] + pi / 2
+
     moveFlag = 0
     turnFlag = 0
 
-    if x[3] == 'FW':
+    if u == 'FW':
         moveFlag = 1
-    elif x[3] == 'BW':
+    elif u == 'BW':
         moveFlag = -1
-    elif x[3] == 'RT':
+    elif u == 'RT':
         turnFlag = -1
-    elif x[3] == 'LT':
+    elif u == 'LT':
         turnFlag = 1
-    '''
+
 
     jF = np.matrix([
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0]])
+        [MOVE*cos(x.item(2))*moveFlag, 0.0, 0.0],
+        [0.0, MOVE*sin(x.item(2))*moveFlag, 0.0],
+        [0.0, 0.0, TURN*pi/180.*turnFlag]])
 
     return jF
 
 
 def jacobH(x):
     # Jacobian of Observation Model
-    jH =  np.matrix([
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0]])
-
-    return jH
+    return np.matrix(np.diag([x.item(0),x.item(1),x.item(2)]))
 
 
 def ekf_estimation(xEst, PEst, z, u):
-
+    global zPrev
     #  Predict
     xPred = motion_model(xEst, u)
 
-    jF = jacobF(xPred)
+    jF = jacobF(xPred,u)
     PPred = jF * PEst * jF.T + Q
 
     #  Update
-    jH = jacobH(xPred)
+
     zPred = observation_model(xPred)
+    jH = jacobH(zPred - zPrev)
+    zPrev = zPred
     print xPred
 
 
@@ -104,8 +100,11 @@ def ekf_estimation(xEst, PEst, z, u):
 
     S = jH * PPred * jH.T + R
     K = PPred * jH.T * np.linalg.inv(S)
-    print K
-    xEst = xPred + K*y
+    print xPred.shape
+    print (K*y.T).shape
+    print xEst.shape
+    xEst = xPred + (K*y.T).T
+
     PEst = (np.eye(len(xEst)) - K * jH) * PPred
 
     print xEst
@@ -183,9 +182,21 @@ def main():
     hxEst = [[0],[0]]
     hxTrue = [[0],[0]]
 
+    plt.cla()
+
+    plt.plot(hxTrue[0],
+             hxTrue[1], "-b", label='True position')
+
+    plt.plot(hxEst[0],
+             hxEst[1], "-r", label='Kalman')
+
+    plt.axis('equal')
+    plt.grid(True)
+    plt.legend(loc='best')
+    plt.pause(20)
     for i in range(1,9):
 
-        measurement = [measurement1[i][0],measurement1[i][1],radians(angleMeasure1[i])]
+        measurement = [measurement2[i][0],measurement2[i][1],radians(angleMeasure2[i])]
 
 
         xEst, PEst = ekf_estimation(xEst, PEst, np.matrix(measurement), u[i])
@@ -194,8 +205,8 @@ def main():
         hxEst[0].append(xEst.item(0))
         hxEst[1].append(xEst.item(1))
 
-        hxTrue[0].append(xTrue1[i][0])
-        hxTrue[1].append(xTrue1[i][1])
+        hxTrue[0].append(xTrue2[i][0])
+        hxTrue[1].append(xTrue2[i][1])
 
 
         hxTrue.append(xTrue1[i])
@@ -204,14 +215,26 @@ def main():
             plt.cla()
 
             plt.plot(hxTrue[0],
-                     hxTrue[1], "-b")
+                     hxTrue[1], "-b",label='True position')
 
             plt.plot(hxEst[0],
-                     hxEst[1], "-r")
+                     hxEst[1], "-r", label='Kalman')
 
             plt.axis('equal')
             plt.grid(True)
+            plt.legend(loc='best')
             plt.pause(0.5)
+    plt.cla()
 
+    plt.plot(hxTrue[0],
+             hxTrue[1], "-b", label='True position')
+
+    plt.plot(hxEst[0],
+             hxEst[1], "-r", label='Kalman')
+
+    plt.axis('equal')
+    plt.legend(loc='best')
+    plt.grid(True)
+    plt.pause(10)
 if __name__ == '__main__':
     main()
